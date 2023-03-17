@@ -1,11 +1,14 @@
 from lcu_driver import Connector
-import requests
+import os
 import json
+import requests
 
-#pip install lcu-driver
+# pip install lcu-driver
 
 connector = Connector()
 currentChampion = "nothing right now"
+folderName = "Champion_Settings"
+backupMark = " [BACKUP]"
 
 
 @connector.ready
@@ -18,7 +21,7 @@ async def connect(connection):
 async def disconnect(_):
     print('The client has closed!')
     
-#everytime your League session UPDATEs: 
+# everytime your League session UPDATEs: 
 @connector.ws.register('/lol-gameflow/v1/gameflow-phase', event_types=('UPDATE',))
 async def main(connection, event):
     await checkLockIn(connection, event.data)
@@ -27,45 +30,59 @@ async def main(connection, event):
 async def checkLockIn(connection, event):
     if event == "GameStart":
         
-        #when the game starts:
+        # when the game starts:
         await updateChampion(connection)
         pasteFiles()
         
 async def checkPostGame(connection, event):
-    if event == 'EndOfGame':
+    if event == 'WaitingForStats':
         
-        #when the game ends:
+        # when the game ends:
         copyFiles()
             
         
 def pasteFiles():
-    print(f'copying keybinds for champion Nr°{currentChampion}')
-    #TODO copy the keybinds from a db or something into the PersistedSettings.json file
+    try: 
+        print(f'Copying keybinds for {currentChampion}...')
+        
+        # all the otto settings go into the otto variable
+        with open(pathToChampSetting(), 'r') as ottoSettings:
+            otto = json.load(ottoSettings)
+
+        # replace the keybind part with the ottoSettings
+        with open(pathToRealSettings(), 'r') as leagueSettings:
+            settings = json.load(leagueSettings)
+            settings['files'][1] = otto
+            #the most important bit of code!!
+
+        # write the new data into the PersistedSettings.json
+        with open(pathToRealSettings(),'w') as newSettings:
+            json.dump(settings, newSettings, indent=4)
+
+        print(f'Replaced keybinds for {currentChampion}.')
+    except:
+        print('File has not been created yet.')
+        copyFiles(True)
     
-def copyFiles():
-    with open('PersistedSettings.json', 'r') as f:
-        data = json.load(f)
-    
-    for file in data['files']:
-        if file['name'] == 'Input.ini':
-            sections = {}
-            for section in file['sections']:
-                sections[section['name']] = section['settings']
-            
-            output_data = {"name": "Input.ini", "sections": []}
-            for section_name in ['GameEvents', 'HUDEvents', 'Quickbinds', 'ShopEvents']:
-                if section_name in sections:
-                    output_data['sections'].append({"name": section_name, "settings": sections[section_name]})
-            
-            with open(f'{currentChampion}_settings.otto', 'w') as output_file:
-                json.dump(output_data, output_file, indent=4)
-                
-            break
+def copyFiles(first_time=False):
+    print(f'Saving keybinds for {currentChampion}...')
+    # if the champion is played for the first time, it will inherit the settings from the backup file
+    # i feel like it is better like this, contact me if you think otherwise
+    if first_time:
+        suffix = backupMark
     else:
-        print("Could not find section 'Input.ini' in file 'PersistedSettings.json'.")
+        suffix = ''
     
+    # save the settings from the PersistedSettings.json
+    with open(pathToRealSettings() + suffix, 'r') as leagueSettings:
+        settings = json.load(leagueSettings)
+    # save the leagueSettings into a champion-specific file
+    with open(pathToChampSetting(), 'w') as ottoSettings:
+        json.dump(settings["files"][1], ottoSettings, indent=4)
+              
+    print(f"File saved as {currentChampion}_settings.otto")
     
-############################### functions to clean everything ###############################
+####################### functions to clean everything up #######################
 def whichChampionIs(champion_id):
     # Get the latest version of Data Dragon
     versions_url = "https://ddragon.leagueoflegends.com/api/versions.json"
@@ -94,10 +111,36 @@ async def updateChampion(connection):
     champion = await champion.json()
     champion = whichChampionIs(champion)
         
-    #update currentChampion
+    # update currentChampion
     global currentChampion
     currentChampion = champion
-    print(f'updated current champion to: {currentChampion} / {champion}')
+    print(f'Updated current champion to: {currentChampion}.')
+
+def setupFolder():
+    try:
+        os.mkdir("Champion_Settings")
+    except:
+        print("Folder 'Champion_Settings' exists already.")
     
+def backup():
+    if not os.path.isfile(pathToRealSettings() + backupMark):
+        with open(pathToRealSettings() + backupMark, 'w') as backupSettings:
+            with open(pathToRealSettings(), 'r') as leagueSettings:
+                json.dump(json.load(leagueSettings), backupSettings, indent=4)
+                # dump the leagueSettings in the backup file
+                
+        print('Backup succesful.')
+    else:
+        print('Backup exists already.')
+    
+def pathToChampSetting():
+    return f"./{folderName}/{currentChampion}_settings.otto"
+
+def pathToRealSettings():
+    return f'./PersistedSettings.json'
+
+setupFolder()
+backup()
 connector.start()
 
+# watch Date A Live
