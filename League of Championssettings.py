@@ -4,11 +4,15 @@ import sys
 import shutil
 import json
 import requests
-import subprocess
+import time
+import threading
+import win32com.client
+
 
 # pip install lcu-driver
 
 connector = Connector()
+connected = False
 currentChampion = "nothing right now"
 folderName = "Champion_Settings"
 fileName = os.path.basename(sys.executable) # League of Championssettings
@@ -19,6 +23,8 @@ backupMark = " [BACKUP]"
 
 @connector.ready
 async def connect(connection):
+    connected = True
+    print('gay')
     # Clear the terminal screen
     os.system('cls' if os.name == 'nt' else 'clear')
     print(green('[READY]') + ' You can lock in your champion and I will change your keybinds for that champion')
@@ -102,7 +108,7 @@ def whichChampionIs(champion_id):
     for champion in champions_data.values():
         if int(champion["key"]) == champion_id:
             return champion["name"]
-
+        
     # Return an error message if no champion with the matching ID was found
     return f"Error: Champion name not found for ID {champion_id}"
 
@@ -127,6 +133,18 @@ def setupFolder():
         print("Seems like it is not the first time I have been installed, but ah well")
 
 def copyItself():
+    # create a shortcut
+    # Create a shortcut object
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shortcut = shell.CreateShortCut(os.path.join(startup_folder, fileName + ".lnk"))
+
+    # Set the target and icon of the shortcut
+    shortcut.Targetpath = fileLocation
+    shortcut.IconLocation = fileLocation
+
+    # Save the shortcut file
+    shortcut.save()
+    
     # copy itself in the Riot Games/League of Legends/Config folder
     
     print(f"Copying myself to {rootFolder}...")
@@ -151,12 +169,6 @@ def backup():
         print('Backup succesful.')
     else:
         print('Backup exists already.')
-
-def restart():
-    # os.startfile(f'{rootFolder}\\{fileName}')
-    subprocess.Popen([f'{rootFolder}\\{fileName}'], creationflags=subprocess.CREATE_NEW_CONSOLE)
-    # subprocess.Popen([f'{rootFolder}\\{fileName}', '/c', 'start'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    os._exit(0)
         
 def find_folder(name, drive='A'):    
     # this is a recursive function
@@ -180,6 +192,18 @@ def find_folder(name, drive='A'):
     except:
         # which calls the function again but with the next dive letter
         return find_folder(name, chr(ord(drive) + 1))
+
+     
+def printLoadingAnimation():
+    while not connected:        
+        print(f"Waiting for League of Legends to start.  ", end='\r')
+        time.sleep(1.5)
+        print(f"Waiting for League of Legends to start.. ", end='\r')
+        time.sleep(0.5)
+        print(f"Waiting for League of Legends to start...", end='\r')
+        time.sleep(0.5)
+        print(f"Waiting for League of Legends to start.. ", end='\r')
+        time.sleep(0.5)
         
 def pathToChampSetting():
     return f"{rootFolder}/{folderName}/{currentChampion}_settings.otto"
@@ -208,14 +232,13 @@ rootFolder = find_folder('Riot Games')  + '\\League of Legends\\Config' # saves 
 backup()
 setupFolder()
 copyItself()
+# Create threads for each function
+thread1 = threading.Thread(target=printLoadingAnimation)
+thread2 = threading.Thread(target=connector.start)
 
-print(f'Checking wether I am in the correct file location...')
-if rootFolder == fileLocationFolder:
-    print('YES! Waiting for League of Legends to launch...')
-    connector.start()
-else:
-    print('NO! Restarting programm...')
-    restart()
+# Start both threads
+thread1.start()
+thread2.start()
 
 # watch Date A Live
 
